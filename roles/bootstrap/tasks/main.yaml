@@ -1,0 +1,60 @@
+---
+- name: Create config user
+  ansible.builtin.user:
+    name: config
+    shell: /bin/bash
+    create_home: yes
+
+- name: Configure sudo for config user
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/config
+    content: 'config ALL=(ALL) NOPASSWD: ALL'
+    owner: root
+    group: root
+    mode: '0440'
+    validate: '/usr/sbin/visudo -cf %s'
+
+- name: Create config user's ~/.ssh
+  ansible.builtin.file:
+    path: /home/config/.ssh
+    state: directory
+    owner: config
+    group: config
+    mode: '0700'
+
+- name: Copy root's authorized keys to config user
+  ansible.builtin.copy:
+    src: /root/.ssh/authorized_keys
+    dest: /home/config/.ssh/authorized_keys
+    remote_src: true
+    owner: config
+    group: config
+    mode: '0600'
+
+- name: SSH Disable password authentication
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    state: present
+
+- name: SSH Disable root login
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin no'
+    state: present
+
+- name: Wait for dpkg lock to be free
+  ansible.builtin.shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "Waiting for dpkg lock..."
+      sleep 10
+    done
+  args:
+    executable: /bin/bash
+
+- name: Restart SSH
+  ansible.builtin.service:
+    name: sshd
+    state: restarted

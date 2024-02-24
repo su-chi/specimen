@@ -1,0 +1,20 @@
+---
+- name: Destroy Droplet
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Destroy Droplet
+      community.digitalocean.digital_ocean_droplet:
+        state: absent
+        oauth_token: "{{ lookup('ansible.builtin.env', 'DO_API_TOKEN') }}"
+        name: "specimen-{{ lookup('ansible.builtin.env', 'PR_NUMBER') or 'primary' }}"
+        unique_name: true
+        wait_timeout: 500
+
+    - name: Remove A record
+      community.digitalocean.digital_ocean_domain_record:
+        state: absent
+        oauth_token: "{{ lookup('ansible.builtin.env', 'DO_API_TOKEN') }}"
+        domain: synchronized.love
+        type: A
+        name: "specimen-{{ lookup('ansible.builtin.env', 'PR_NUMBER') or 'primary' }}"

@@ -1,0 +1,99 @@
+---
+- name: Provision Droplet
+  hosts: localhost
+  connection: local
+  vars:
+    domain: synchronized.love
+  tasks:
+    - name: Build instance name
+      ansible.builtin.set_fact:
+        instance_name: "specimen-{{ lookup('ansible.builtin.env', 'PR_NUMBER') or 'primary' }}"
+
+    - name: Build instance URL
+      ansible.builtin.set_fact:
+        instance_url: "{{ instance_name }}.{{ domain }}"
+
+    - name: Add public SSH key
+      community.digitalocean.digital_ocean_sshkey:
+        oauth_token: "{{ lookup('ansible.builtin.env', 'DO_API_TOKEN') }}"
+        name: "Specimen Public Key"
+        ssh_pub_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDVC3i933/IBPPznBzTeDwhPvCC/ooAbA6ppMVCgcwowyn/qV6/sYUNRJHRJZAaz/Hdy6LhDX1kNbJ/QQh1/Yzkeo2oFZtcYUrlJn3IeY3YYAK1BtlbAYffdlUnDddetZM+O/QpkFpRx+jEmtQ/+lmvPPuBEAHRZRxxHc56wqrRp5ExUPkdftwR8aRQzWhOwikObl6PZcQQm5jPyfuQAjoEPuKVhISpemQ91IK5gnlR3ors0fR4taTTdhvT8lrv2w915FtDb/VMagQYNRMJArGHYEGP1pozCckYduX3Yl6Mx/vv0taTvDG/jnkBEgALL179MYC8zCEjUAWB//yhQWzmBs/9vqeiWNo4uZYhVIawSRcIc7ZkhIuqZTfbv/dpNuCgy6fix3VCviwmY3+oT4IFVL9xqybAGK/sowK9Qb5x4pAJ+UbLNA9xs+p46v9xI8YiFv4NbmMDFojWZLpNn9Sh9IdlEKQI2xMngauTjjfQP1fY2UCtQ2hFjQ61GBA4lc4zH1U4f/gBwq0O+GPGrmb/H0rnfb3lwgicu072aGYfwnK6UuLAQCzEWySqoBh4Qjw/l6hmKJKhZ/vECIYoCxqS8aG9XANvuHtwMHnObuknKtPauvW/9nnnwoSHAGzoWVAbfiKIV3TaNGwpL/ja5M8alucxzW5cqDTec7Kc+cIFXQ== urza@specimen"
+        state: present
+      register: ssh_key
+
+    - name: Create Droplet
+      community.digitalocean.digital_ocean_droplet:
+        state: present
+        oauth_token: "{{ lookup('ansible.builtin.env', 'DO_API_TOKEN') }}"
+        name: "{{ instance_name }}"
+        size: s-1vcpu-512mb-10gb
+        region: sfo3
+        ssh_keys: ["{{ ssh_key.data.ssh_key.id }}", ]
+        image: ubuntu-20-04-x64
+        unique_name: true
+        wait: true
+        wait_timeout: 500
+      register: droplet
+
+    - name: Capture Droplet public IP
+      ansible.builtin.set_fact:
+        droplet_ip: "{{ droplet.data.droplet.networks.v4 | json_query('[?type==`public`].ip_address') | first}}"
+
+    - name: Droplet was built/changed
+      block:
+        - name: Wait for SSH to come up
+          ansible.builtin.wait_for_connection:
+            delay: 60
+            timeout: 300
+          delegate_to: droplet_ip
+          remote_user: root
+
+        - name: Ensure Droplet is in ssh known_hosts
+          ansible.builtin.shell: ssh-keyscan -H {{ droplet_ip }} >> ~/.ssh/known_hosts
+
+        - name: Add Droplet to host group for initial configuration
+          ansible.builtin.add_host:
+            name: "{{ droplet_ip }}"
+            groups: "launched"
+
+        - name: Create A record
+          community.digitalocean.digital_ocean_domain_record:
+            state: present
+            oauth_token: "{{ lookup('ansible.builtin.env', 'DO_API_TOKEN') }}"
+            domain: synchronized.love
+            type: A
+            name: "{{ instance_name }}"
+            data: "{{ droplet_ip }}"
+      when: droplet.changed
+
+    - name: Add Droplet to host group for idempotent configuration
+      ansible.builtin.add_host:
+        name: "{{ droplet_ip }}"
+        groups: "running"
+
+- name: Droplet initial configuration
+  hosts: launched
+  remote_user: root
+  roles:
+    - bootstrap
+
+- name: Droplet configuration
+  hosts: running
+  remote_user: config
+  become: true
+  roles:
+    - docker
+    - ufw
+  tasks:
+    - name: Run nginx container
+      community.general.docker_container:
+        name: nginx
+        image: nginx:latest
+        state: started
+        ports:
+          - "80:80"
+          - "443:443"
+
+    - name: Print URL
+      ansible.builtin.debug:
+        msg: "http://{{ hostvars['localhost'].instance_url }}"

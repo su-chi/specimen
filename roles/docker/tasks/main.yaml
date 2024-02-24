@@ -1,0 +1,36 @@
+---
+- name: Install dependencies
+  apt:
+    pkg:
+      - ca-certificates
+      - curl
+      - gnupg-agent
+    lock_timeout: 500
+    state: present
+
+- name: Add Docker GPG apt Key
+  apt_key:
+    url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+    state: present
+
+- name: Add Docker Repository
+  apt_repository:
+    repo: "deb https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Install docker-ce
+  apt:
+    pkg:
+      - docker-ce
+      - docker-compose-plugin
+    state: present
+    lock_timeout: 500
+    update_cache: yes
+
+- name: Create 'appuser' user
+  ansible.builtin.user:
+    name: appuser
+    groups: docker
+    append: yes
+    shell: /bin/bash
+    create_home: yes
