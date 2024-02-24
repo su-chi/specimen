@@ -37,7 +37,7 @@ Destroy:
 $ DO_API_TOKEN=YOURDOAPITOKENHERE PR_NUMBER=1440 ansible-playbook destroy_instance.yaml
 ```
 
-# Solution
+# Solution Explanation
 This repository contains two ansible playbooks - `build_instance.yaml` and `destroy_instance.yaml` - for building, configuring and destroying a DigitalOcean droplet.
 
 ## `build_instance.yaml`
