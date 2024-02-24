@@ -8,6 +8,35 @@ Write a script to provision a new hypothetical application server on a cloud ser
 
 This script can be in any language, but be able to speak to each point. For this example, a working demo would be great. You can use any docker image you’d like to run a basic web server (hello world)
 
+# How to use
+To use these playbooks, you need:
+- Install `ansible` and have `ansible-playbook` in your `$PATH`
+- Have a [DigitalOcean](https://www.digitalocean.com/) account and an API token with write access
+
+## Build & destroy primary instance
+(NOTE: this could easily be extended create a pool of "primary" instances)
+
+Build:
+```
+$ DO_API_TOKEN=YOURDOAPITOKENHERE ansible-playbook build_instance.yaml
+```
+
+Destroy:
+```
+$ DO_API_TOKEN=YOURDOAPITOKENHERE ansible-playbook destroy_instance.yaml
+```
+
+## Build & destroy a PR instance
+Build:
+```
+$ DO_API_TOKEN=YOURDOAPITOKENHERE PR_NUMBER=1440 ansible-playbook build_instance.yaml
+```
+
+Destroy:
+```
+$ DO_API_TOKEN=YOURDOAPITOKENHERE PR_NUMBER=1440 ansible-playbook destroy_instance.yaml
+```
+
 # Solution
 This repository contains two ansible playbooks - `build_instance.yaml` and `destroy_instance.yaml` - for building, configuring and destroying a DigitalOcean droplet.
 
@@ -52,7 +81,7 @@ Supporting the `PR_NUMBER` environment variable would give this the ability to s
 
 If this were to grow into an actual deployment tool, we would want to parameterize a lot more to make it more customizable. There are also several other configuration changes that we would probably want to make on the droplet. The nice thing about this design is, we could create new roles (similar to the `docker` and `ufw` roles) and include them in the `roles` list of the last play in `build_instance.yaml`.
 
-## A scalable solution
+# A more scalable solution
 As I mentioned before, an Infrastructure as Code tool like Terraform would be better suited for spinning up the cloud resources. The thing that's nice about this current implementation is, the ansible roles that are used to configure the instance could still be used. Here's how I would design this:
 
 - Use [Packer](https://www.packer.io/) to build an AMI (Amazon Machine Image) using existing ansible role(s)
